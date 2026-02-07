@@ -1,0 +1,137 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-dark-700;
+  }
+
+  body {
+    @apply bg-dark-900 text-dark-100 font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-dark-800;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-dark-600 rounded-full hover:bg-dark-500;
+  }
+}
+
+@layer components {
+  /* Glass morphism cards */
+  .glass-card {
+    @apply bg-dark-800/50 backdrop-blur-xl border border-dark-700/50 rounded-2xl;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:bg-dark-700/50 hover:border-duo-500/30;
+  }
+
+  /* Gradient backgrounds */
+  .gradient-primary {
+    @apply bg-gradient-to-r from-duo-500 to-accent-500;
+  }
+
+  .gradient-bg {
+    @apply bg-gradient-to-br from-dark-950 via-dark-900 to-dark-950;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply px-6 py-3 rounded-xl font-semibold text-white
+           bg-gradient-to-r from-duo-500 to-duo-600
+           hover:from-duo-400 hover:to-duo-500
+           active:from-duo-600 active:to-duo-700
+           transition-all duration-200 shadow-lg shadow-duo-500/25
+           hover:shadow-duo-500/40 hover:scale-[1.02]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 rounded-xl font-semibold
+           bg-dark-700/50 text-dark-100 border border-dark-600
+           hover:bg-dark-600/50 hover:border-dark-500
+           active:bg-dark-700
+           transition-all duration-200;
+  }
+
+  .btn-ghost {
+    @apply px-4 py-2 rounded-lg font-medium
+           text-dark-300 hover:text-dark-100 hover:bg-dark-800
+           transition-all duration-200;
+  }
+
+  /* Input fields */
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl
+           bg-dark-800/50 border border-dark-700
+           text-dark-100 placeholder-dark-500
+           focus:outline-none focus:border-duo-500 focus:ring-2 focus:ring-duo-500/20
+           transition-all duration-200;
+  }
+
+  /* Chat bubbles */
+  .chat-bubble-sent {
+    @apply max-w-[75%] px-4 py-3 rounded-2xl rounded-br-md
+           bg-gradient-to-r from-duo-600 to-duo-500 text-white
+           shadow-lg shadow-duo-500/20;
+  }
+
+  .chat-bubble-received {
+    @apply max-w-[75%] px-4 py-3 rounded-2xl rounded-bl-md
+           bg-dark-700 text-dark-100
+           border border-dark-600;
+  }
+
+  /* Status indicators */
+  .status-online {
+    @apply w-3 h-3 rounded-full bg-green-500 animate-pulse-soft;
+  }
+
+  .status-offline {
+    @apply w-3 h-3 rounded-full bg-dark-600;
+  }
+
+  .status-connecting {
+    @apply w-3 h-3 rounded-full bg-yellow-500 animate-pulse;
+  }
+
+  /* Encryption badge */
+  .encryption-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
+           bg-green-500/10 text-green-400 text-xs font-medium
+           border border-green-500/20;
+  }
+
+  /* Pact status */
+  .pact-active {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full
+           bg-duo-500/10 text-duo-400 text-sm font-medium
+           border border-duo-500/20;
+  }
+
+  .pact-pending {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full
+           bg-yellow-500/10 text-yellow-400 text-sm font-medium
+           border border-yellow-500/20;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-duo-400 to-accent-400 bg-clip-text text-transparent;
+  }
+
+  .animate-in {
+    @apply animate-fade-in;
+  }
+}
