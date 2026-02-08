@@ -256,3 +256,10 @@ export const hasSecureStorage = (): boolean => {
         typeof indexedDB !== 'undefined'
     );
 };
+
+// Re-export new crypto modules for convenience
+export * from '../crypto/keyManager';
+export * from '../crypto/doubleRatchet';
+export * from '../crypto/encryption';
+export * from '../crypto/zkProof';
+
