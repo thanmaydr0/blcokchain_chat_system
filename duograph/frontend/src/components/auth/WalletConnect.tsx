@@ -91,7 +91,7 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
         try {
             await switchToSepolia();
             setIsCorrectNetwork(true);
-        } catch (err) {
+        } catch {
             setError('Failed to switch network');
         } finally {
             setIsConnecting(false);

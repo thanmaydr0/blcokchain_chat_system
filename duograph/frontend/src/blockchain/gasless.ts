@@ -99,7 +99,7 @@ export const buildUserOperation = async (
     const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('1', 'gwei');
 
     // Paymaster data - include paymaster address for sponsorship
-    const paymasterAndData = CONTRACT_ADDRESSES.PAYMASTER;
+    const paymasterAndData = CONTRACT_ADDRESSES.Paymaster;
 
     // Adjust gas limits if deploying account
     const gasLimits = {
@@ -172,7 +172,7 @@ export const submitUserOperation = async (
                 jsonrpc: '2.0',
                 id: 1,
                 method: 'eth_sendUserOperation',
-                params: [formattedOp, CONTRACT_ADDRESSES.ENTRYPOINT],
+                params: [formattedOp, CONTRACT_ADDRESSES.EntryPoint],
             }),
         });
 
@@ -337,7 +337,7 @@ export const isGaslessAvailable = async (): Promise<boolean> => {
         const entryPoints = result.result || [];
 
         return entryPoints.some(
-            (ep: string) => ep.toLowerCase() === CONTRACT_ADDRESSES.ENTRYPOINT.toLowerCase()
+            (ep: string) => ep.toLowerCase() === CONTRACT_ADDRESSES.EntryPoint.toLowerCase()
         );
     } catch {
         return false;

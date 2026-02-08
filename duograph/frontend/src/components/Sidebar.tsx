@@ -8,7 +8,7 @@ export const Sidebar = () => {
     const { user, logout, walletAddress } = useAuthStore();
     const { pacts, activePact, setActivePact } = usePactStore();
     const { sidebarOpen, openModal } = useUIStore();
-    const [_hoveredPact, setHoveredPact] = useState<string | null>(null);
+    const [, setHoveredPact] = useState<string | null>(null);
 
     if (!sidebarOpen) return null;
 

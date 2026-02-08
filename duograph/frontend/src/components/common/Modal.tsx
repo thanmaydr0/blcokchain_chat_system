@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { X } from 'lucide-react';
 import { useUIStore } from '../../store';
 
@@ -31,10 +31,10 @@ export const Modal = ({
 
     const isOpen = modalOpen === id;
 
-    const handleClose = () => {
+    const handleClose = useCallback(() => {
         onClose?.();
         closeModal();
-    };
+    }, [onClose, closeModal]);
 
     // Close on escape key
     useEffect(() => {
@@ -46,7 +46,7 @@ export const Modal = ({
 
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen]);
+    }, [isOpen, handleClose]);
 
     // Close on overlay click
     const handleOverlayClick = (e: React.MouseEvent) => {

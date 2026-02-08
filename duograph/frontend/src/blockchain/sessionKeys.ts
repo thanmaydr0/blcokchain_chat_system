@@ -1,193 +1,72 @@
-/**
- * Session Keys Module
- * 
- * On-chain session key management for pacts.
- */
+import { Wallet, keccak256, solidityPacked } from 'ethers';
+import { getProvider, getSigner } from './wallet';
+import { Contract } from 'ethers';
+import { getBinaryPactInterface } from './contracts';
 
-import { ethers } from 'ethers';
-import { getBinaryPact, type SessionKey } from './contracts';
-import { getProvider } from '../lib/web3';
-import { executeGasless, type GaslessResult } from './gasless';
+const SESSION_KEY_STORAGE_PREFIX = 'duograph_session_key_';
 
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface SessionKeyInfo extends SessionKey {
-    /** Whether this key is currently valid (not expired and active) */
-    isValid: boolean;
-    /** Time remaining until expiry (ms) */
-    timeRemaining: number;
+export interface SessionKeyInfo {
+    address: string;
+    privateKey: string;
+    expiresAt?: number;
 }
 
-// ============================================================================
-// Session Key Registration
-// ============================================================================
+export const generateSessionKey = (pactAddress: string): SessionKeyInfo => {
+    const wallet = Wallet.createRandom();
+    const info: SessionKeyInfo = {
+        address: wallet.address,
+        privateKey: wallet.privateKey,
+    };
 
-/**
- * Register a new session key on the pact contract.
- */
-export const registerSessionKey = async (
-    pactAddress: string,
-    keyHash: string,
-    validityPeriodSeconds: number = 86400 // 24 hours default
-): Promise<GaslessResult> => {
-    try {
-        const pactInterface = new ethers.Interface([
-            'function registerSessionKey(bytes32 keyHash, uint256 validityPeriod)',
-        ]);
-
-        const callData = pactInterface.encodeFunctionData('registerSessionKey', [
-            keyHash,
-            validityPeriodSeconds,
-        ]);
-
-        return await executeGasless({
-            target: pactAddress,
-            data: callData,
-        });
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to register session key',
-        };
-    }
+    localStorage.setItem(SESSION_KEY_STORAGE_PREFIX + pactAddress, JSON.stringify(info));
+    return info;
 };
 
-/**
- * Rotate session key (revoke old, register new).
- */
-export const rotateSessionKey = async (
-    pactAddress: string,
-    newKeyHash: string,
-    validityPeriodSeconds: number = 86400
-): Promise<GaslessResult> => {
+export const getStoredSessionKey = (pactAddress: string): SessionKeyInfo | null => {
+    const data = localStorage.getItem(SESSION_KEY_STORAGE_PREFIX + pactAddress);
+    if (!data) return null;
     try {
-        const pactInterface = new ethers.Interface([
-            'function rotateSessionKey(bytes32 newKeyHash, uint256 validityPeriod)',
-        ]);
-
-        const callData = pactInterface.encodeFunctionData('rotateSessionKey', [
-            newKeyHash,
-            validityPeriodSeconds,
-        ]);
-
-        return await executeGasless({
-            target: pactAddress,
-            data: callData,
-        });
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to rotate session key',
-        };
-    }
-};
-
-/**
- * Revoke a session key.
- */
-export const revokeSessionKey = async (
-    pactAddress: string,
-    keyHash: string
-): Promise<GaslessResult> => {
-    try {
-        const pactInterface = new ethers.Interface([
-            'function revokeSessionKey(bytes32 keyHash)',
-        ]);
-
-        const callData = pactInterface.encodeFunctionData('revokeSessionKey', [keyHash]);
-
-        return await executeGasless({
-            target: pactAddress,
-            data: callData,
-        });
-    } catch (error) {
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Failed to revoke session key',
-        };
-    }
-};
-
-// ============================================================================
-// Session Key Queries
-// ============================================================================
-
-/**
- * Get all session keys for a user in a pact.
- */
-export const getSessionKeys = async (
-    pactAddress: string,
-    userAddress: string
-): Promise<SessionKeyInfo[]> => {
-    const provider = getProvider();
-    const pact = getBinaryPact(pactAddress, provider);
-
-    try {
-        const keys: SessionKey[] = await pact.getSessionKeys(userAddress);
-        const now = BigInt(Math.floor(Date.now() / 1000));
-
-        return keys.map(key => ({
-            ...key,
-            isValid: key.isActive && key.expiresAt > now,
-            timeRemaining: key.expiresAt > now
-                ? Number((key.expiresAt - now) * 1000n)
-                : 0,
-        }));
-    } catch (error) {
-        console.error('Failed to get session keys:', error);
-        return [];
-    }
-};
-
-/**
- * Get only active (valid) session keys.
- */
-export const getActiveSessionKeys = async (
-    pactAddress: string,
-    userAddress: string
-): Promise<SessionKeyInfo[]> => {
-    const keys = await getSessionKeys(pactAddress, userAddress);
-    return keys.filter(k => k.isValid);
-};
-
-/**
- * Check if user has any active session key.
- */
-export const hasActiveSessionKey = async (
-    pactAddress: string,
-    userAddress: string
-): Promise<boolean> => {
-    const provider = getProvider();
-    const pact = getBinaryPact(pactAddress, provider);
-
-    try {
-        return await pact.hasActiveSessionKey(userAddress);
+        return JSON.parse(data) as SessionKeyInfo;
     } catch {
-        return false;
+        return null;
     }
 };
 
-// ============================================================================
-// Session Key Generation Helpers
-// ============================================================================
-
-/**
- * Generate a random session key and return its hash.
- */
-export const generateSessionKeyHash = (): { key: Uint8Array; hash: string } => {
-    const key = crypto.getRandomValues(new Uint8Array(32));
-    const hash = ethers.keccak256(key);
-    return { key, hash };
+export const clearSessionKey = (pactAddress: string) => {
+    localStorage.removeItem(SESSION_KEY_STORAGE_PREFIX + pactAddress);
 };
 
-/**
- * Hash an existing key for on-chain registration.
- */
-export const hashSessionKey = (key: Uint8Array | string): string => {
-    const keyBytes = typeof key === 'string'
-        ? ethers.getBytes(key)
-        : key;
-    return ethers.keccak256(keyBytes);
+export const registerSessionKeyOnChain = async (
+    pactAddress: string,
+    sessionKeyAddress: string,
+    validitySeconds: number = 86400 * 7 // 7 days default
+) => {
+    const signer = getSigner();
+    if (!signer) throw new Error("Wallet not connected");
+
+    const pact = new Contract(pactAddress, getBinaryPactInterface(), signer);
+
+    // Assuming the contract validates keccak256(abi.encodePacked(address)) or similar
+    // Based on common patterns: bytes32 keyHash = keccak256(abi.encodePacked(sessionKeyAddress));
+    const keyHash = keccak256(solidityPacked(['address'], [sessionKeyAddress]));
+
+    try {
+        const tx = await pact.registerSessionKey(keyHash, validitySeconds);
+        await tx.wait();
+        console.log(`Session key ${sessionKeyAddress} registered for pact ${pactAddress}`);
+    } catch (error) {
+        console.error("Failed to register session key:", error);
+        throw error;
+    }
+};
+
+export const signWithSessionKey = async (pactAddress: string, messageHash: string) => {
+    const sessionKeyInfo = getStoredSessionKey(pactAddress);
+    if (!sessionKeyInfo) throw new Error("No session key found for this pact");
+
+    const provider = getProvider(); // Session keys might not need a provider if just signing
+    const wallet = new Wallet(sessionKeyInfo.privateKey, provider || undefined);
+
+    // Signing the binary message hash
+    return await wallet.signMessage(messageHash);
 };

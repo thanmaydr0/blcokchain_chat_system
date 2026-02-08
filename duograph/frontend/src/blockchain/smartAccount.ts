@@ -1,191 +1,115 @@
-/**
- * Smart Account Module (ERC-4337)
- * 
- * Manages counterfactual smart account addresses and deployment.
- */
+import { Contract, JsonRpcSigner, concat, type Provider, type Signer } from 'ethers';
+import {
+    CONTRACT_ADDRESSES,
+    getAccountFactoryInterface,
+    getAccountInterface
+} from './contracts';
+import { getProvider, getSigner } from './wallet';
 
-import { ethers } from 'ethers';
-import { CONTRACT_ADDRESSES, getAccountFactory, getEntryPoint } from './contracts';
-import { getSigner } from './wallet';
-import { getProvider } from '../lib/web3';
+// Determine the salt for deterministic deployment
+// For simplicity, we can use a hash of the user's EOA address or a fixed value for the first account
+export const DEFAULT_SALT = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-// ============================================================================
-// Constants
-// ============================================================================
-
-const DEFAULT_SALT = 0n;
-
-// ============================================================================
-// Types
-// ============================================================================
-
-export interface SmartAccountInfo {
-    /** Smart account address (counterfactual or deployed) */
-    address: string;
-    /** Whether the account is deployed on-chain */
-    isDeployed: boolean;
-    /** Owner EOA address */
-    owner: string;
-    /** Current nonce */
-    nonce: bigint;
-}
-
-// ============================================================================
-// Account Address Derivation
-// ============================================================================
-
-/**
- * Get counterfactual smart account address for an owner.
- * This address is deterministic - same owner always gets same address.
- */
-export const getSmartAccountAddress = async (
-    ownerAddress: string,
-    salt: bigint = DEFAULT_SALT
-): Promise<string> => {
+export const getSmartAccountAddress = async (ownerAddress: string, salt: string = DEFAULT_SALT): Promise<string> => {
     const provider = getProvider();
-    const factory = getAccountFactory(provider);
+    if (!provider) throw new Error("Provider not connected");
+
+    const factory = new Contract(
+        CONTRACT_ADDRESSES.DuoGraphAccountFactory,
+        getAccountFactoryInterface(),
+        provider
+    );
 
     try {
-        // Use getFunction for dynamic ABI - Contract.getAddress exists in the ABI
-        const address = await factory.getFunction('getAddress')(ownerAddress, salt);
-        return address;
+        return await factory.getAddress(ownerAddress, salt);
     } catch (error) {
-        console.error('Failed to get smart account address:', error);
-        throw new Error('Failed to derive smart account address');
+        console.error("Failed to get smart account address:", error);
+        throw error;
     }
 };
 
-/**
- * Check if a smart account is deployed.
- */
-export const isSmartAccountDeployed = async (accountAddress: string): Promise<boolean> => {
-    const provider = getProvider();
+export const deploySmartAccount = async (signer: JsonRpcSigner, salt: string = DEFAULT_SALT): Promise<string> => {
+    const factory = new Contract(
+        CONTRACT_ADDRESSES.DuoGraphAccountFactory,
+        getAccountFactoryInterface(),
+        signer
+    );
+
+    const ownerAddress = await signer.getAddress();
+
+    // Check if already deployed
+    const accountAddress = await getSmartAccountAddress(ownerAddress, salt);
+    const code = await signer.provider.getCode(accountAddress);
+
+    if (code !== '0x') {
+        return accountAddress; // Already deployed
+    }
 
     try {
+        // For now, we are not passing a public key for a secondary key, just using EOA as owner.
+        // The factory expects (owner, publicKey, salt).
+        // We can pass empty bytes for publicKey if the contract handles it (it usually initializes a P256 key or similar).
+        // Based on ABI: createAccount(address owner, bytes calldata publicKey, bytes32 salt)
+        const publicKey = '0x';
+
+        const tx = await factory.createAccount(ownerAddress, publicKey, salt);
+        await tx.wait();
+        return accountAddress;
+    } catch (error) {
+        console.error("Failed to deploy smart account:", error);
+        throw error;
+    }
+};
+
+export const getSmartAccountContract = (accountAddress: string, signerOrProvider?: Signer | Provider) => {
+    const signer = getSigner();
+    const provider = getProvider();
+    const runner = signerOrProvider || signer || provider;
+
+    if (!runner) throw new Error("No signer or provider available");
+
+    return new Contract(
+        accountAddress,
+        getAccountInterface(),
+        runner
+    );
+};
+
+// Helper to check if a specific address is a smart account deployed by our factory
+export const isSmartAccountDeployed = async (accountAddress: string): Promise<boolean> => {
+    try {
+        const provider = getProvider();
+        if (!provider) return false;
         const code = await provider.getCode(accountAddress);
-        return code !== '0x' && code !== '0x0';
+        return code !== '0x';
     } catch {
         return false;
     }
 };
 
-/**
- * Get smart account nonce from EntryPoint.
- */
 export const getSmartAccountNonce = async (accountAddress: string): Promise<bigint> => {
     const provider = getProvider();
-    const entryPoint = getEntryPoint(provider);
-
+    if (!provider) throw new Error("Provider not connected");
+    const account = new Contract(
+        accountAddress,
+        getAccountInterface(),
+        provider
+    );
     try {
-        // Key 0 for standard nonces
-        const nonce = await entryPoint.getNonce(accountAddress, 0);
-        return nonce;
+        return await account.nonce();
     } catch {
-        return 0n;
+        return 0n; // Fallback or if not deployed? If not deployed, nonce should be 0.
     }
 };
 
-/**
- * Get full smart account info.
- */
-export const getSmartAccountInfo = async (ownerAddress: string): Promise<SmartAccountInfo> => {
-    const address = await getSmartAccountAddress(ownerAddress);
-    const isDeployed = await isSmartAccountDeployed(address);
-    const nonce = await getSmartAccountNonce(address);
-
-    return {
-        address,
-        isDeployed,
-        owner: ownerAddress,
-        nonce,
-    };
+export const getAccountInitCode = (ownerAddress: string, salt: string = DEFAULT_SALT): string => {
+    const factoryInterface = getAccountFactoryInterface();
+    const publicKey = '0x';
+    const data = factoryInterface.encodeFunctionData('createAccount', [ownerAddress, publicKey, salt]);
+    return concat([CONTRACT_ADDRESSES.DuoGraphAccountFactory, data]);
 };
 
-// ============================================================================
-// Account Creation
-// ============================================================================
-
-/**
- * Create smart account deployment initCode.
- * This is used as part of the first UserOperation.
- */
-export const getAccountInitCode = (ownerAddress: string, salt: bigint = DEFAULT_SALT): string => {
-    const factoryInterface = new ethers.Interface([
-        'function createAccount(address owner, uint256 salt) returns (address)',
-    ]);
-
-    const initCallData = factoryInterface.encodeFunctionData('createAccount', [ownerAddress, salt]);
-
-    // initCode = factory address + calldata
-    return ethers.concat([CONTRACT_ADDRESSES.ACCOUNT_FACTORY, initCallData]);
-};
-
-/**
- * Create smart account via direct transaction (requires gas).
- * Alternative to gasless UserOperation.
- */
-export const createSmartAccount = async (
-    salt: bigint = DEFAULT_SALT
-): Promise<{ address: string; txHash: string }> => {
-    const signer = await getSigner();
-    if (!signer) {
-        throw new Error('No signer available');
-    }
-
-    const ownerAddress = await signer.getAddress();
-    const factory = getAccountFactory(signer);
-
-    // Check if already deployed
-    const expectedAddress = await getSmartAccountAddress(ownerAddress, salt);
-    const isDeployed = await isSmartAccountDeployed(expectedAddress);
-
-    if (isDeployed) {
-        return { address: expectedAddress, txHash: '' };
-    }
-
-    try {
-        const tx = await factory.createAccount(ownerAddress, salt);
-        const receipt = await tx.wait();
-
-        return {
-            address: expectedAddress,
-            txHash: receipt.hash,
-        };
-    } catch (error) {
-        console.error('Failed to create smart account:', error);
-        throw new Error('Failed to deploy smart account');
-    }
-};
-
-// ============================================================================
-// Calldata Encoding
-// ============================================================================
-
-/**
- * Encode calldata for smart account execute function.
- */
-export const encodeExecuteCalldata = (
-    target: string,
-    value: bigint,
-    data: string
-): string => {
-    const accountInterface = new ethers.Interface([
-        'function execute(address dest, uint256 value, bytes calldata func)',
-    ]);
-
+export const encodeExecuteCalldata = (target: string, value: bigint, data: string): string => {
+    const accountInterface = getAccountInterface();
     return accountInterface.encodeFunctionData('execute', [target, value, data]);
-};
-
-/**
- * Encode calldata for smart account executeBatch function.
- */
-export const encodeExecuteBatchCalldata = (
-    targets: string[],
-    datas: string[]
-): string => {
-    const accountInterface = new ethers.Interface([
-        'function executeBatch(address[] calldata dest, bytes[] calldata func)',
-    ]);
-
-    return accountInterface.encodeFunctionData('executeBatch', [targets, datas]);
 };

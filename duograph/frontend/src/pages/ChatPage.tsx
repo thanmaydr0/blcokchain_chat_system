@@ -1,13 +1,27 @@
+import { useState, useMemo } from 'react';
 import { MessageSquare, Video, Phone } from 'lucide-react';
 import { Sidebar } from '../components/Sidebar';
 import { ChatHeader, MessageList, MessageInput } from '../components/chat';
+import { OnboardingContainer } from '../components/Onboarding';
 import { useAuthStore, usePactStore, useMessageStore } from '../store';
 import type { Message, MessageType, MessageStatus } from '../types';
 
 export const ChatPage = () => {
     const { user } = useAuthStore();
-    const { activePact } = usePactStore();
+    const { activePact, pacts } = usePactStore();
     const { messages, addMessage } = useMessageStore();
+    const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+
+    // Determine if we should show onboarding
+    // If user has no pacts and hasn't dismissed it, show onboarding
+    const showOnboarding = useMemo(() => {
+        return pacts.length === 0 && !onboardingDismissed;
+    }, [pacts.length, onboardingDismissed]);
+
+    const handleOnboardingComplete = () => {
+        // Refresh pacts or just hide onboarding if state updated
+        setOnboardingDismissed(true);
+    };
 
     const pactMessages = activePact ? messages[activePact.id] || [] : [];
 
@@ -39,6 +53,10 @@ export const ChatPage = () => {
     const handleVideoCall = () => {
         console.log('Starting video call...');
     };
+
+    if (showOnboarding) {
+        return <OnboardingContainer onComplete={handleOnboardingComplete} />;
+    }
 
     return (
         <div className="h-screen flex bg-dark-950">

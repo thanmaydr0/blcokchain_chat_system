@@ -398,7 +398,7 @@ export class PeerConnectionManager {
             onAnswer: (answer, fromGhostId) => {
                 this.handleAnswer(answer, fromGhostId);
             },
-            onIceCandidate: (candidate, _fromGhostId) => {
+            onIceCandidate: (candidate) => {
                 this.handleRemoteIceCandidate(candidate);
             },
             onError: (error) => {
