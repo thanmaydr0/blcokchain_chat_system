@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { Wallet, Check, AlertCircle, Loader2 } from 'lucide-react';
 import {
     connectWallet,
-    switchToBaseSepolia,
+    switchToSepolia,
     getConnectedAddress,
     formatAddress,
-    BASE_SEPOLIA_CONFIG,
+    SEPOLIA_CONFIG,
 } from '../../lib/web3';
 import { useAuthStore } from '../../store';
 
@@ -46,7 +46,7 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
             };
 
             const handleChainChanged = (chainId: unknown) => {
-                setIsCorrectNetwork((chainId as string) === BASE_SEPOLIA_CONFIG.chainIdHex);
+                setIsCorrectNetwork((chainId as string) === SEPOLIA_CONFIG.chainIdHex);
             };
 
             window.ethereum.on('accountsChanged', handleAccountsChanged);
@@ -70,10 +70,10 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
                 throw new Error('Failed to connect wallet. Please install MetaMask.');
             }
 
-            // Switch to Base Sepolia
-            const switched = await switchToBaseSepolia();
+            // Switch to Sepolia
+            const switched = await switchToSepolia();
             if (!switched) {
-                throw new Error('Failed to switch to Base Sepolia network.');
+                throw new Error('Failed to switch to Sepolia network.');
             }
 
             setWalletAddress(address);
@@ -89,7 +89,7 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
     const handleSwitchNetwork = async () => {
         setIsConnecting(true);
         try {
-            await switchToBaseSepolia();
+            await switchToSepolia();
             setIsCorrectNetwork(true);
         } catch (err) {
             setError('Failed to switch network');
@@ -115,7 +115,7 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="status-online" />
-                        <span className="text-sm text-dark-400">Base Sepolia</span>
+                        <span className="text-sm text-dark-400">Sepolia</span>
                     </div>
                 </div>
             </div>
@@ -154,7 +154,7 @@ export const WalletConnect = ({ onConnect }: WalletConnectProps) => {
                     ) : (
                         <>
                             <AlertCircle className="w-5 h-5" />
-                            Switch to Base Sepolia
+                            Switch to Sepolia
                         </>
                     )}
                 </button>

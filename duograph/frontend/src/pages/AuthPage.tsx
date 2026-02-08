@@ -91,7 +91,7 @@ export const AuthPage = () => {
                                     Zero Gas Fees
                                 </h3>
                                 <p className="text-sm text-dark-400">
-                                    Built on Base Sepolia with account abstraction. No wallet setup
+                                    Built on Ethereum Sepolia with account abstraction. No wallet setup
                                     required to start.
                                 </p>
                             </div>

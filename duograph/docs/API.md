@@ -8,190 +8,119 @@ DuoGraph is a blockchain-anchored, two-person encrypted chat system. This docume
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│                 │     │                 │     │                 │
-│   Frontend      │◄───►│   Supabase      │     │   Blockchain    │
-│   (React)       │     │   (Metadata)    │     │   (Base Sepolia)│
-│                 │     │                 │     │                 │
-└────────┬────────┘     └─────────────────┘     └────────▲────────┘
-         │                                               │
-         │              ┌─────────────────┐              │
-         │              │                 │              │
-         └─────────────►│   WebRTC P2P    │◄─────────────┘
-                        │   (Encrypted)   │
-                        │                 │
-                        └─────────────────┘
+│     Frontend    │     │     Supabase    │     │    Ethereum     │
+│   (React)       │ ──▶ │   (Metadata)    │     │    (Sepolia)    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+        │                                               ▲
+        │                                               │
+        └───────────────────────────────────────────────┘
+                    (Contract Interactions)
+```
+
+## Smart Contract ABI
+
+### PactFactory
+
+**Address**: Check `deployments.json` after deployment
+
+```typescript
+interface PactFactory {
+  // Create a new pact between two users
+  createPact(user1: address, user2: address): Promise<uint256>
+  
+  // Get pact by ID
+  getPact(pactId: uint256): Promise<PactData>
+  
+  // Check if pact exists between users
+  checkPactExists(user1: address, user2: address): Promise<[boolean, uint256]>
+  
+  // Get all pacts for a user
+  getUserPacts(user: address): Promise<uint256[]>
+}
+```
+
+### BinaryPact
+
+```typescript
+interface BinaryPact {
+  // Immutable members
+  user1: address     // First participant (immutable)
+  user2: address     // Second participant (immutable)
+  
+  // Register encryption public key
+  registerPublicKey(publicKey: bytes): Promise<void>
+  
+  // Session key management
+  registerSessionKey(keyHash: bytes32, validityPeriod: uint256): Promise<void>
+  rotateSessionKey(newKeyHash: bytes32, validityPeriod: uint256): Promise<void>
+  
+  // Message registry
+  registerMessageHash(messageHash: bytes32): Promise<void>
+  verifyMessageHash(messageHash: bytes32): Promise<boolean>
+}
 ```
 
 ## Supabase Schema
 
 ### Tables
 
-#### `users`
-```sql
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  email TEXT UNIQUE NOT NULL,
-  wallet_address TEXT,
-  public_key JSONB,
-  key_fingerprint TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
+**users**
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| email | text | User email |
+| public_key_hash | text | Hash of encryption public key |
+| created_at | timestamp | Account creation time |
 
-#### `pacts`
-```sql
-CREATE TABLE pacts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  chain_pact_id INTEGER UNIQUE,
-  initiator_id UUID REFERENCES users(id),
-  partner_id UUID REFERENCES users(id),
-  status TEXT DEFAULT 'pending',
-  encrypted_metadata TEXT,
-  transaction_hash TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  accepted_at TIMESTAMP WITH TIME ZONE,
-  dissolved_at TIMESTAMP WITH TIME ZONE
-);
-```
+**pacts**
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| contract_address | text | On-chain pact address |
+| user1_id | uuid | First participant |
+| user2_id | uuid | Second participant |
+| created_at | timestamp | Pact creation time |
 
-#### `encrypted_messages`
-```sql
-CREATE TABLE encrypted_messages (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  pact_id UUID REFERENCES pacts(id),
-  sender_id UUID REFERENCES users(id),
-  encrypted_content TEXT NOT NULL,
-  iv TEXT NOT NULL,
-  message_type TEXT DEFAULT 'text',
-  ipfs_hash TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-
-## Smart Contract ABI
-
-### BinaryPact
-
-```json
-[
-  {
-    "name": "createPact",
-    "type": "function",
-    "inputs": [
-      { "name": "partner", "type": "address" },
-      { "name": "encryptedMetadata", "type": "bytes32" }
-    ],
-    "outputs": [{ "name": "pactId", "type": "uint256" }]
-  },
-  {
-    "name": "acceptPact",
-    "type": "function",
-    "inputs": [{ "name": "pactId", "type": "uint256" }]
-  },
-  {
-    "name": "dissolvePact",
-    "type": "function",
-    "inputs": [{ "name": "pactId", "type": "uint256" }]
-  },
-  {
-    "name": "registerPublicKey",
-    "type": "function",
-    "inputs": [{ "name": "publicKey", "type": "bytes" }]
-  },
-  {
-    "name": "getPact",
-    "type": "function",
-    "inputs": [{ "name": "pactId", "type": "uint256" }],
-    "outputs": [{ "name": "", "type": "tuple" }]
-  }
-]
-```
+**messages** (metadata only)
+| Column | Type | Description |
+|--------|------|-------------|
+| id | uuid | Primary key |
+| pact_id | uuid | Associated pact |
+| sender_id | uuid | Message sender |
+| ipfs_hash | text | IPFS CID of encrypted content |
+| created_at | timestamp | Send time |
 
 ## Encryption Protocol
 
-### Key Exchange (X3DH)
+### Key Exchange
 
-1. Each user generates an ECDH P-256 key pair
-2. Public keys are registered on-chain via `registerPublicKey()`
-3. Key exchange occurs when pact is accepted
-4. Shared secret derived using ECDH
+1. Users generate ECDH keypairs (P-256)
+2. Public keys registered on-chain
+3. Shared secret derived using ECDH
+4. Session keys rotated regularly
 
-### Message Encryption (Double Ratchet)
+### Message Encryption
 
-1. **Root Key**: Derived from X3DH shared secret
-2. **Chain Keys**: Derived from root key for each message
-3. **Message Keys**: One-time keys for AES-256-GCM encryption
-
-```typescript
-interface EncryptedMessage {
-  header: {
-    publicKey: JsonWebKey;    // DH ratchet public key
-    previousChainLength: number;
-    messageNumber: number;
-  };
-  iv: string;                 // Base64 encoded 12-byte IV
-  ciphertext: string;         // Base64 encoded encrypted content
-}
+```
+plaintext → compress → encrypt (AES-256-GCM) → upload to IPFS → store CID in Supabase
 ```
 
 ## WebRTC Signaling
 
-### Signal Flow
-
-1. Caller initiates signaling via Nostr relay (or Supabase realtime)
-2. Signal types: `offer`, `answer`, `ice-candidate`
-3. Connection established after ICE negotiation
-
-### Signal Format
+Uses Supabase Realtime for signaling:
 
 ```typescript
-interface RTCSignal {
-  type: 'offer' | 'answer' | 'ice-candidate';
-  pactId: string;
-  fromUserId: string;
-  toUserId: string;
-  payload: RTCSessionDescriptionInit | RTCIceCandidateInit;
-  timestamp: number;
-}
+// Channel name format
+const channel = `pact:${pactId}`
+
+// Events
+- offer: SDP offer
+- answer: SDP answer
+- ice-candidate: ICE candidate
 ```
 
-## IPFS Media Sharing
+## Network Configuration
 
-### Upload Flow
-
-1. File encrypted client-side with shared pact key
-2. Encrypted blob uploaded to IPFS via Pinata
-3. IPFS hash stored in message metadata
-4. Recipient downloads and decrypts using shared key
-
-### File Metadata
-
-```typescript
-interface IPFSFileMetadata {
-  name: string;
-  type: string;           // MIME type
-  size: number;
-  encryptedKey: string;   // Encrypted file key
-  iv: string;             // Encryption IV
-}
-```
-
-## Error Codes
-
-| Code | Description |
-|------|-------------|
-| `PACT_NOT_FOUND` | Pact ID does not exist |
-| `PACT_FULL` | Pact already has 2 participants |
-| `NOT_PARTICIPANT` | User is not part of this pact |
-| `ENCRYPTION_FAILED` | Failed to encrypt/decrypt message |
-| `WEBRTC_FAILED` | WebRTC connection failed |
-| `WALLET_NOT_CONNECTED` | No wallet connected |
-
-## Rate Limits
-
-| Endpoint | Limit |
-|----------|-------|
-| Messages | 60/minute per pact |
-| File uploads | 10/minute per user |
-| Pact creation | 5/hour per user |
+| Network | Chain ID | RPC |
+|---------|----------|-----|
+| Sepolia | 11155111 | https://rpc.sepolia.org |

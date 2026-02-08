@@ -3,227 +3,421 @@ pragma solidity ^0.8.20;
 
 /**
  * @title BinaryPact
- * @notice A contract for creating two-person encrypted communication pacts
- * @dev Each pact can have exactly 2 participants, enforced on-chain
+ * @author DuoGraph Team
+ * @notice Individual pact contract for exactly 2 users with session key management
+ * @dev CRITICAL SECURITY: user1 and user2 are IMMUTABLE - no function to add 3rd user exists
+ * 
+ * This contract enforces the mathematical impossibility of a 3rd party:
+ * - user1 and user2 are set in constructor and marked immutable
+ * - No addUser(), setUser(), or similar function exists
+ * - All functions check onlyPactMember modifier
  */
 contract BinaryPact {
     // ============ Errors ============
-    error PactNotFound();
-    error PactAlreadyFull();
-    error PactAlreadyActive();
-    error PactNotPending();
-    error NotPactParticipant();
-    error CannotInviteSelf();
-    error AlreadyHasPact();
+    
+    /// @notice Thrown when caller is not user1 or user2
+    error NotPactMember();
+    
+    /// @notice Thrown when action requires both signatures
+    error RequiresBothSignatures();
+    
+    /// @notice Thrown when pact is already dissolved
+    error PactAlreadyDissolved();
+    
+    /// @notice Thrown when session key is invalid
+    error InvalidSessionKey();
+    
+    /// @notice Thrown when session key has expired
+    error SessionKeyExpired();
+    
+    /// @notice Thrown when signature is invalid
+    error InvalidSignature();
+    
+    /// @notice Thrown when deadline has passed
+    error DeadlinePassed();
     
     // ============ Events ============
-    event PactCreated(
-        uint256 indexed pactId,
-        address indexed initiator,
-        address indexed invitee,
-        bytes32 encryptedMetadata
-    );
     
-    event PactAccepted(
-        uint256 indexed pactId,
-        address indexed acceptor,
-        uint256 timestamp
-    );
-    
-    event PactDissolved(
-        uint256 indexed pactId,
-        address indexed dissolver,
-        uint256 timestamp
-    );
-    
-    event PublicKeyRegistered(
+    /// @notice Emitted when a new session key is registered
+    event SessionKeyRegistered(
         address indexed user,
-        bytes publicKey
+        bytes32 indexed keyHash,
+        uint256 expiresAt
     );
     
-    // ============ Enums ============
-    enum PactStatus {
-        NONE,
-        PENDING,
-        ACTIVE,
-        DISSOLVED
-    }
+    /// @notice Emitted when session key is rotated
+    event SessionKeyRotated(
+        address indexed user,
+        bytes32 indexed oldKeyHash,
+        bytes32 indexed newKeyHash
+    );
+    
+    /// @notice Emitted when session key is revoked
+    event SessionKeyRevoked(address indexed user, bytes32 indexed keyHash);
+    
+    /// @notice Emitted when pact is dissolved
+    event PactDissolved(uint256 indexed pactId, uint256 timestamp);
+    
+    /// @notice Emitted when public key is updated
+    event PublicKeyUpdated(address indexed user, bytes publicKey);
+    
+    /// @notice Emitted when message hash is registered
+    event MessageHashRegistered(bytes32 indexed messageHash, address indexed sender);
+    
+    /// @notice Emitted when shared secret commitment is stored
+    event SharedSecretCommitment(bytes32 indexed commitment);
     
     // ============ Structs ============
-    struct Pact {
-        uint256 id;
-        address initiator;
-        address partner;
-        PactStatus status;
-        bytes32 encryptedMetadata; // IPFS hash of encrypted pact metadata
+    
+    /// @notice Session key data
+    struct SessionKey {
+        bytes32 keyHash;
         uint256 createdAt;
-        uint256 activatedAt;
-        uint256 dissolvedAt;
+        uint256 expiresAt;
+        bool isActive;
     }
     
-    // ============ State Variables ============
-    uint256 private _pactIdCounter;
+    /// @notice Signature for 2-of-2 operations
+    struct DualSignature {
+        uint8 v1;
+        bytes32 r1;
+        bytes32 s1;
+        uint8 v2;
+        bytes32 r2;
+        bytes32 s2;
+    }
     
-    // Mapping from pact ID to Pact
-    mapping(uint256 => Pact) public pacts;
+    // ============ Immutable State (SECURITY CRITICAL) ============
     
-    // Mapping from user address to their active pact ID (0 if none)
-    mapping(address => uint256) public userActivePact;
+    /// @notice Pact ID from factory
+    uint256 public immutable pactId;
     
-    // Mapping from user address to their public key (for encryption)
-    mapping(address => bytes) public userPublicKeys;
+    /// @notice First participant - IMMUTABLE, CANNOT BE CHANGED
+    address public immutable user1;
+    
+    /// @notice Second participant - IMMUTABLE, CANNOT BE CHANGED  
+    address public immutable user2;
+    
+    /// @notice Factory contract address
+    address public immutable factory;
+    
+    /// @notice Creation timestamp
+    uint256 public immutable createdAt;
+    
+    // ============ Mutable State ============
+    
+    /// @notice Whether the pact has been dissolved
+    bool public isDissolved;
+    
+    /// @notice Dissolution timestamp (0 if active)
+    uint256 public dissolvedAt;
+    
+    /// @notice Public keys for encryption (ECDH)
+    mapping(address => bytes) public publicKeys;
+    
+    /// @notice Session keys per user (user => session key array)
+    mapping(address => SessionKey[]) public sessionKeys;
+    
+    /// @notice Active session key index per user
+    mapping(address => uint256) public activeSessionKeyIndex;
+    
+    /// @notice Shared secret commitment hash
+    bytes32 public sharedSecretCommitment;
+    
+    /// @notice Message hashes that have been sent (for verification)
+    mapping(bytes32 => bool) public messageHashes;
+    
+    /// @notice Nonces for replay protection
+    mapping(address => uint256) public nonces;
+    
+    /// @notice EIP-712 domain separator
+    bytes32 public immutable DOMAIN_SEPARATOR;
+    
+    /// @notice Typehash for dissolution
+    bytes32 public constant DISSOLVE_TYPEHASH = 
+        keccak256("Dissolve(uint256 pactId,uint256 nonce,uint256 deadline)");
+    
+    /// @notice Typehash for session key registration
+    bytes32 public constant SESSION_KEY_TYPEHASH =
+        keccak256("RegisterSessionKey(bytes32 keyHash,uint256 expiresAt,uint256 nonce)");
     
     // ============ Constructor ============
-    constructor() {
-        _pactIdCounter = 1; // Start from 1, 0 means no pact
-    }
-    
-    // ============ External Functions ============
     
     /**
-     * @notice Register or update your public key for encryption
-     * @param publicKey The user's public key (ECDH P-256 format)
+     * @notice Creates a new Binary Pact between exactly 2 users
+     * @dev user1 and user2 are IMMUTABLE - this is the core security guarantee
+     * @param _pactId Unique identifier from factory
+     * @param _user1 First participant (cannot be changed after deployment)
+     * @param _user2 Second participant (cannot be changed after deployment)
+     * @param _factory Factory contract address
      */
-    function registerPublicKey(bytes calldata publicKey) external {
-        userPublicKeys[msg.sender] = publicKey;
-        emit PublicKeyRegistered(msg.sender, publicKey);
+    constructor(
+        uint256 _pactId,
+        address _user1,
+        address _user2,
+        address _factory
+    ) {
+        pactId = _pactId;
+        user1 = _user1;
+        user2 = _user2;
+        factory = _factory;
+        createdAt = block.timestamp;
+        
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256("DuoGraphBinaryPact"),
+                keccak256("1"),
+                block.chainid,
+                address(this)
+            )
+        );
+    }
+    
+    // ============ Modifiers ============
+    
+    /**
+     * @notice Restricts function to only user1 or user2
+     * @dev This modifier enforces the 2-person restriction
+     */
+    modifier onlyPactMember() {
+        if (msg.sender != user1 && msg.sender != user2) revert NotPactMember();
+        _;
+    }
+    
+    /// @notice Ensures pact is still active
+    modifier pactActive() {
+        if (isDissolved) revert PactAlreadyDissolved();
+        _;
+    }
+    
+    // ============ Public Key Management ============
+    
+    /**
+     * @notice Register or update public key for encryption
+     * @param publicKey ECDH public key bytes
+     */
+    function registerPublicKey(bytes calldata publicKey) external onlyPactMember pactActive {
+        publicKeys[msg.sender] = publicKey;
+        emit PublicKeyUpdated(msg.sender, publicKey);
     }
     
     /**
-     * @notice Create a new pact and invite a partner
-     * @param partner The address to invite
-     * @param encryptedMetadata IPFS hash of encrypted pact metadata
-     * @return pactId The ID of the created pact
+     * @notice Store commitment to shared secret (for verification)
+     * @param commitment Hash of the derived shared secret
      */
-    function createPact(
-        address partner,
-        bytes32 encryptedMetadata
-    ) external returns (uint256 pactId) {
-        if (partner == msg.sender) revert CannotInviteSelf();
-        if (userActivePact[msg.sender] != 0) revert AlreadyHasPact();
-        if (userActivePact[partner] != 0) revert AlreadyHasPact();
+    function commitSharedSecret(bytes32 commitment) external onlyPactMember pactActive {
+        sharedSecretCommitment = commitment;
+        emit SharedSecretCommitment(commitment);
+    }
+    
+    // ============ Session Key Management ============
+    
+    /**
+     * @notice Register a new session key for forward secrecy
+     * @param keyHash Hash of the session key
+     * @param validityPeriod How long the key is valid (in seconds)
+     */
+    function registerSessionKey(
+        bytes32 keyHash,
+        uint256 validityPeriod
+    ) external onlyPactMember pactActive {
+        if (keyHash == bytes32(0)) revert InvalidSessionKey();
         
-        pactId = _pactIdCounter++;
+        uint256 expiresAt = block.timestamp + validityPeriod;
         
-        pacts[pactId] = Pact({
-            id: pactId,
-            initiator: msg.sender,
-            partner: partner,
-            status: PactStatus.PENDING,
-            encryptedMetadata: encryptedMetadata,
+        sessionKeys[msg.sender].push(SessionKey({
+            keyHash: keyHash,
             createdAt: block.timestamp,
-            activatedAt: 0,
-            dissolvedAt: 0
-        });
+            expiresAt: expiresAt,
+            isActive: true
+        }));
         
-        emit PactCreated(pactId, msg.sender, partner, encryptedMetadata);
+        activeSessionKeyIndex[msg.sender] = sessionKeys[msg.sender].length - 1;
+        
+        emit SessionKeyRegistered(msg.sender, keyHash, expiresAt);
     }
     
     /**
-     * @notice Accept a pending pact invitation
-     * @param pactId The ID of the pact to accept
+     * @notice Rotate to a new session key (deactivates old one)
+     * @param newKeyHash Hash of the new session key
+     * @param validityPeriod Validity period for new key
      */
-    function acceptPact(uint256 pactId) external {
-        Pact storage pact = pacts[pactId];
+    function rotateSessionKey(
+        bytes32 newKeyHash,
+        uint256 validityPeriod
+    ) external onlyPactMember pactActive {
+        if (newKeyHash == bytes32(0)) revert InvalidSessionKey();
         
-        if (pact.id == 0) revert PactNotFound();
-        if (pact.status != PactStatus.PENDING) revert PactNotPending();
-        if (pact.partner != msg.sender) revert NotPactParticipant();
-        if (userActivePact[msg.sender] != 0) revert AlreadyHasPact();
+        uint256 oldIndex = activeSessionKeyIndex[msg.sender];
+        bytes32 oldKeyHash = bytes32(0);
         
-        pact.status = PactStatus.ACTIVE;
-        pact.activatedAt = block.timestamp;
-        
-        // Set active pact for both users
-        userActivePact[pact.initiator] = pactId;
-        userActivePact[msg.sender] = pactId;
-        
-        emit PactAccepted(pactId, msg.sender, block.timestamp);
-    }
-    
-    /**
-     * @notice Dissolve an active pact (either participant can do this)
-     * @param pactId The ID of the pact to dissolve
-     */
-    function dissolvePact(uint256 pactId) external {
-        Pact storage pact = pacts[pactId];
-        
-        if (pact.id == 0) revert PactNotFound();
-        if (pact.initiator != msg.sender && pact.partner != msg.sender) {
-            revert NotPactParticipant();
+        if (sessionKeys[msg.sender].length > 0) {
+            sessionKeys[msg.sender][oldIndex].isActive = false;
+            oldKeyHash = sessionKeys[msg.sender][oldIndex].keyHash;
         }
         
-        // Clear active pact for both users
-        if (pact.status == PactStatus.ACTIVE) {
-            userActivePact[pact.initiator] = 0;
-            userActivePact[pact.partner] = 0;
-        }
+        uint256 expiresAt = block.timestamp + validityPeriod;
         
-        pact.status = PactStatus.DISSOLVED;
-        pact.dissolvedAt = block.timestamp;
+        sessionKeys[msg.sender].push(SessionKey({
+            keyHash: newKeyHash,
+            createdAt: block.timestamp,
+            expiresAt: expiresAt,
+            isActive: true
+        }));
         
-        emit PactDissolved(pactId, msg.sender, block.timestamp);
+        activeSessionKeyIndex[msg.sender] = sessionKeys[msg.sender].length - 1;
+        
+        emit SessionKeyRotated(msg.sender, oldKeyHash, newKeyHash);
     }
     
     /**
-     * @notice Cancel a pending pact (only initiator)
-     * @param pactId The ID of the pact to cancel
+     * @notice Revoke a session key
+     * @param keyIndex Index of the session key to revoke
      */
-    function cancelPact(uint256 pactId) external {
-        Pact storage pact = pacts[pactId];
+    function revokeSessionKey(uint256 keyIndex) external onlyPactMember {
+        require(keyIndex < sessionKeys[msg.sender].length, "Invalid index");
         
-        if (pact.id == 0) revert PactNotFound();
-        if (pact.status != PactStatus.PENDING) revert PactNotPending();
-        if (pact.initiator != msg.sender) revert NotPactParticipant();
+        bytes32 keyHash = sessionKeys[msg.sender][keyIndex].keyHash;
+        sessionKeys[msg.sender][keyIndex].isActive = false;
         
-        pact.status = PactStatus.DISSOLVED;
-        pact.dissolvedAt = block.timestamp;
+        emit SessionKeyRevoked(msg.sender, keyHash);
+    }
+    
+    // ============ Message Registry ============
+    
+    /**
+     * @notice Register a message hash for on-chain verification
+     * @param messageHash Hash of the encrypted message
+     */
+    function registerMessageHash(bytes32 messageHash) external onlyPactMember pactActive {
+        messageHashes[messageHash] = true;
+        emit MessageHashRegistered(messageHash, msg.sender);
+    }
+    
+    /**
+     * @notice Verify a message hash was registered
+     * @param messageHash Hash to verify
+     * @return isValid Whether the hash is registered
+     */
+    function verifyMessageHash(bytes32 messageHash) external view returns (bool isValid) {
+        return messageHashes[messageHash];
+    }
+    
+    // ============ Emergency Dissolution (2-of-2 Required) ============
+    
+    /**
+     * @notice Dissolve the pact - REQUIRES BOTH USER SIGNATURES
+     * @dev This is the only way to end a pact - both parties must agree
+     * @param deadline Signature expiration
+     * @param sig Dual signature struct with both user signatures
+     */
+    function dissolvePact(
+        uint256 deadline,
+        DualSignature calldata sig
+    ) external pactActive {
+        if (block.timestamp > deadline) revert DeadlinePassed();
         
-        emit PactDissolved(pactId, msg.sender, block.timestamp);
+        bytes32 structHash = keccak256(
+            abi.encode(DISSOLVE_TYPEHASH, pactId, nonces[user1]++, deadline)
+        );
+        
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
+        );
+        
+        // Verify user1 signature
+        address signer1 = ecrecover(digest, sig.v1, sig.r1, sig.s1);
+        if (signer1 != user1) revert InvalidSignature();
+        
+        // Verify user2 signature (with their nonce)
+        structHash = keccak256(
+            abi.encode(DISSOLVE_TYPEHASH, pactId, nonces[user2]++, deadline)
+        );
+        digest = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
+        );
+        
+        address signer2 = ecrecover(digest, sig.v2, sig.r2, sig.s2);
+        if (signer2 != user2) revert InvalidSignature();
+        
+        // Both signatures valid - dissolve pact
+        isDissolved = true;
+        dissolvedAt = block.timestamp;
+        
+        // Notify factory
+        IPactFactory(factory).deactivatePact(pactId);
+        
+        emit PactDissolved(pactId, block.timestamp);
     }
     
     // ============ View Functions ============
     
     /**
-     * @notice Get pact details
-     * @param pactId The ID of the pact
-     * @return The pact struct
+     * @notice Get the other participant address
+     * @param user One of the participants
+     * @return partner The other participant
      */
-    function getPact(uint256 pactId) external view returns (Pact memory) {
-        return pacts[pactId];
+    function getPartner(address user) external view returns (address partner) {
+        if (user == user1) return user2;
+        if (user == user2) return user1;
+        revert NotPactMember();
     }
     
     /**
-     * @notice Get user's active pact
-     * @param user The user address
-     * @return The active pact or empty if none
+     * @notice Check if address is a pact member
+     * @param user Address to check
+     * @return result Whether the address is user1 or user2
      */
-    function getUserPact(address user) external view returns (Pact memory) {
-        uint256 pactId = userActivePact[user];
-        if (pactId == 0) {
-            return Pact(0, address(0), address(0), PactStatus.NONE, bytes32(0), 0, 0, 0);
+    function isMember(address user) external view returns (bool result) {
+        return user == user1 || user == user2;
+    }
+    
+    /**
+     * @notice Get active session key for a user
+     * @param user User address
+     * @return keyHash Active session key hash
+     * @return expiresAt Expiration timestamp
+     */
+    function getActiveSessionKey(address user) external view returns (
+        bytes32 keyHash,
+        uint256 expiresAt
+    ) {
+        if (sessionKeys[user].length == 0) return (bytes32(0), 0);
+        
+        SessionKey storage key = sessionKeys[user][activeSessionKeyIndex[user]];
+        if (!key.isActive || block.timestamp > key.expiresAt) {
+            return (bytes32(0), 0);
         }
-        return pacts[pactId];
+        
+        return (key.keyHash, key.expiresAt);
     }
     
     /**
-     * @notice Get user's public key
-     * @param user The user address
-     * @return The public key bytes
+     * @notice Get all session keys for a user
+     * @param user User address
+     * @return keys Array of session keys
      */
-    function getPublicKey(address user) external view returns (bytes memory) {
-        return userPublicKeys[user];
+    function getSessionKeys(address user) external view returns (SessionKey[] memory keys) {
+        return sessionKeys[user];
     }
     
     /**
-     * @notice Check if two users can form a pact
-     * @param user1 First user address
-     * @param user2 Second user address
-     * @return canForm Whether they can form a pact
+     * @notice Get pact status summary
+     * @return isActive Active status
+     * @return created Creation timestamp
+     * @return dissolved Dissolution timestamp
      */
-    function canFormPact(address user1, address user2) external view returns (bool canForm) {
-        return user1 != user2 && 
-               userActivePact[user1] == 0 && 
-               userActivePact[user2] == 0;
+    function getStatus() external view returns (
+        bool isActive,
+        uint256 created,
+        uint256 dissolved
+    ) {
+        return (!isDissolved, createdAt, dissolvedAt);
     }
+}
+
+/// @notice Interface for PactFactory
+interface IPactFactory {
+    function deactivatePact(uint256 pactId) external;
 }

@@ -21,12 +21,13 @@ export interface Pact {
     transactionHash?: string;
 }
 
-export enum PactStatus {
-    PENDING = 'pending',
-    ACTIVE = 'active',
-    DISSOLVED = 'dissolved',
-    EXPIRED = 'expired',
-}
+export const PactStatus = {
+    PENDING: 'pending',
+    ACTIVE: 'active',
+    DISSOLVED: 'dissolved',
+    EXPIRED: 'expired',
+} as const;
+export type PactStatus = typeof PactStatus[keyof typeof PactStatus];
 
 // Message types
 export interface Message {
@@ -40,22 +41,24 @@ export interface Message {
     metadata?: MessageMetadata;
 }
 
-export enum MessageType {
-    TEXT = 'text',
-    IMAGE = 'image',
-    VIDEO = 'video',
-    AUDIO = 'audio',
-    FILE = 'file',
-    SYSTEM = 'system',
-}
+export const MessageType = {
+    TEXT: 'text',
+    IMAGE: 'image',
+    VIDEO: 'video',
+    AUDIO: 'audio',
+    FILE: 'file',
+    SYSTEM: 'system',
+} as const;
+export type MessageType = typeof MessageType[keyof typeof MessageType];
 
-export enum MessageStatus {
-    SENDING = 'sending',
-    SENT = 'sent',
-    DELIVERED = 'delivered',
-    READ = 'read',
-    FAILED = 'failed',
-}
+export const MessageStatus = {
+    SENDING: 'sending',
+    SENT: 'sent',
+    DELIVERED: 'delivered',
+    READ: 'read',
+    FAILED: 'failed',
+} as const;
+export type MessageStatus = typeof MessageStatus[keyof typeof MessageStatus];
 
 export interface MessageMetadata {
     fileName?: string;
@@ -78,20 +81,22 @@ export interface Call {
     duration?: number;
 }
 
-export enum CallType {
-    AUDIO = 'audio',
-    VIDEO = 'video',
-}
+export const CallType = {
+    AUDIO: 'audio',
+    VIDEO: 'video',
+} as const;
+export type CallType = typeof CallType[keyof typeof CallType];
 
-export enum CallStatus {
-    RINGING = 'ringing',
-    CONNECTING = 'connecting',
-    CONNECTED = 'connected',
-    ENDED = 'ended',
-    MISSED = 'missed',
-    DECLINED = 'declined',
-    FAILED = 'failed',
-}
+export const CallStatus = {
+    RINGING: 'ringing',
+    CONNECTING: 'connecting',
+    CONNECTED: 'connected',
+    ENDED: 'ended',
+    MISSED: 'missed',
+    DECLINED: 'declined',
+    FAILED: 'failed',
+} as const;
+export type CallStatus = typeof CallStatus[keyof typeof CallStatus];
 
 // Notification types
 export interface Notification {
@@ -104,13 +109,14 @@ export interface Notification {
     data?: Record<string, unknown>;
 }
 
-export enum NotificationType {
-    PACT_REQUEST = 'pact_request',
-    PACT_ACCEPTED = 'pact_accepted',
-    MESSAGE = 'message',
-    CALL = 'call',
-    SYSTEM = 'system',
-}
+export const NotificationType = {
+    PACT_REQUEST: 'pact_request',
+    PACT_ACCEPTED: 'pact_accepted',
+    MESSAGE: 'message',
+    CALL: 'call',
+    SYSTEM: 'system',
+} as const;
+export type NotificationType = typeof NotificationType[keyof typeof NotificationType];
 
 // Encryption types
 export interface EncryptionKeys {

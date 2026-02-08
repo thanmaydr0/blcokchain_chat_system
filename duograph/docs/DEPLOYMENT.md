@@ -13,149 +13,128 @@
 
 ### 1. Supabase Setup
 
-1. Create a new Supabase project at [supabase.com](https://supabase.com)
-2. Run the SQL migrations from `docs/API.md`
-3. Enable Row Level Security (RLS) policies
-4. Get your project URL and anon key
+1. Create a new project at [Supabase](https://supabase.com)
+2. Get your project URL and anon key from Settings → API
+3. Create the required tables (see `docs/API.md`)
 
-### 2. IPFS Setup (Pinata)
+### 2. Smart Contracts
 
-1. Create account at [pinata.cloud](https://pinata.cloud)
-2. Generate a JWT token
-3. Note your gateway URL
+```bash
+cd contracts
+cp .env.example .env
+# Edit .env with your private key
+```
 
-### 3. Base Sepolia Setup
+### 3. Ethereum Sepolia Setup
 
-1. Add Base Sepolia to MetaMask:
-   - Network Name: Base Sepolia
-   - RPC URL: https://sepolia.base.org
-   - Chain ID: 84532
+1. Add Sepolia to MetaMask:
+   - Network Name: Sepolia
+   - RPC URL: https://rpc.sepolia.org
+   - Chain ID: 11155111
    - Symbol: ETH
-   - Block Explorer: https://sepolia.basescan.org
+   - Explorer: https://sepolia.etherscan.io
 
 2. Get testnet ETH:
-   - [Base Faucet](https://www.coinbase.com/faucets/base-ethereum-goerli-faucet)
+   - [Alchemy Faucet](https://www.alchemy.com/faucets/ethereum-sepolia)
+   - [Infura Faucet](https://www.infura.io/faucet/sepolia)
+
+### 4. IPFS (Pinata)
+
+1. Create account at [Pinata](https://pinata.cloud)
+2. Generate API JWT token
+3. Add to frontend `.env`
 
 ## Local Development
 
 ### Frontend
 
 ```bash
-cd duograph/frontend
-
-# Install dependencies
+cd frontend
 npm install
-
-# Create .env file
 cp .env.example .env
-
 # Edit .env with your credentials
-# VITE_SUPABASE_URL=...
-# VITE_SUPABASE_ANON_KEY=...
-# etc.
-
-# Start development server
 npm run dev
 ```
 
-### Smart Contracts
+### Contracts
 
 ```bash
-cd duograph/contracts
+cd contracts
+npm install
+cp .env.example .env
+# Edit .env with private key
 
-# Install Foundry (if not installed)
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
+# Compile
+npm run compile
 
-# Install dependencies
-forge install
+# Test
+npm test
 
-# Build contracts
-forge build
-
-# Test contracts
-forge test
-
-# Deploy to Base Sepolia
-forge script script/Deploy.s.sol:DeployScript \
-  --rpc-url https://sepolia.base.org \
-  --private-key $PRIVATE_KEY \
-  --broadcast
+# Deploy to Sepolia
+npm run deploy:sepolia
 ```
 
 ## Production Deployment
 
-### Deploy to Render
+### 1. Deploy Contracts
 
-1. Create a new Web Service on Render
-2. Connect your GitHub repository
-3. Configure:
-   - **Build Command**: `cd duograph/frontend && npm install && npm run build`
-   - **Start Command**: `cd duograph/frontend && npm run preview`
-   - **Environment Variables**: Add all VITE_* variables
+```bash
+cd contracts
+npm run deploy:sepolia
+```
 
-### Alternative: Static Site Deployment
+Save the addresses from `deployments.json`.
 
-1. Build the frontend:
-   ```bash
-   cd duograph/frontend
-   npm run build
-   ```
+### 2. Configure Frontend
 
-2. Deploy the `dist` folder to:
-   - Vercel
-   - Netlify
-   - Cloudflare Pages
+Update `frontend/.env`:
 
-### Configuration
+```bash
+VITE_PACT_FACTORY_ADDRESS=<from deployments.json>
+VITE_PAYMASTER_ADDRESS=<from deployments.json>
+VITE_ACCOUNT_FACTORY_ADDRESS=<from deployments.json>
+```
+
+### 3. Build & Deploy Frontend
+
+```bash
+cd frontend
+npm run build
+```
+
+Deploy `dist/` folder to:
+- Vercel
+- Netlify
+- Render
+- Cloudflare Pages
+
+## Environment Variables
+
+### Frontend
 
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `VITE_SUPABASE_URL` | Supabase project URL | Yes |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon key | Yes |
-| `VITE_BASE_SEPOLIA_RPC` | Base Sepolia RPC URL | No (default provided) |
-| `VITE_BUNDLER_URL` | ERC-4337 bundler URL | For gasless tx |
-| `VITE_IPFS_GATEWAY` | IPFS gateway URL | For media |
-| `VITE_PINATA_JWT` | Pinata JWT token | For uploads |
+| `VITE_SEPOLIA_RPC` | Sepolia RPC URL | No (default provided) |
+| `VITE_PINATA_JWT` | Pinata JWT token | No |
 
-## Security Checklist
+### Contracts
 
-- [ ] Enable Supabase RLS policies
-- [ ] Use environment variables for all secrets
-- [ ] Enable HTTPS on production
-- [ ] Set up rate limiting
-- [ ] Configure CORS properly
-- [ ] Audit smart contracts before mainnet
-
-## Monitoring
-
-### Supabase
-- Enable database logging
-- Set up alerts for auth failures
-
-### Blockchain
-- Monitor contract events using:
-  - [Basescan](https://sepolia.basescan.org)
-  - The Graph (for complex queries)
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `PRIVATE_KEY` | Deployer private key | Yes |
+| `SEPOLIA_RPC` | Sepolia RPC URL | No |
+| `ETHERSCAN_API_KEY` | For contract verification | No |
 
 ## Troubleshooting
 
-### Common Issues
+### Wallet Connection Issues
+- Check network is Sepolia
+- Clear MetaMask cache
+- Ensure sufficient test ETH
 
-**Wallet not connecting**
-- Ensure MetaMask is installed
-- Check network is Base Sepolia
-- Clear browser cache
-
-**Messages not encrypting**
-- Verify Web Crypto API is available (HTTPS required)
-- Check key generation in IndexedDB
-
-**WebRTC not connecting**
-- Check STUN/TURN server availability
-- Verify firewall allows UDP traffic
-- Try different browser
-
-## Support
-
-For issues, open a GitHub issue or contact the development team.
+### Contract Deployment Fails
+- Verify private key is correct
+- Check wallet has Sepolia ETH
+- Try a different RPC URL

@@ -3,7 +3,8 @@
  * Uses simple-peer for easier WebRTC management
  */
 
-import Peer, { Instance as PeerInstance, SignalData } from 'simple-peer';
+import Peer from 'simple-peer';
+import type { Instance as PeerInstance, SignalData } from 'simple-peer';
 
 // ICE server configuration for NAT traversal
 const ICE_SERVERS = [
@@ -153,9 +154,8 @@ export const replaceVideoTrack = (
     newTrack: MediaStreamTrack
 ): void => {
     const oldTrack = oldStream.getVideoTracks()[0];
-    if (oldTrack) {
-        // @ts-expect-error - simple-peer internal method
-        peer.replaceTrack(oldTrack, newTrack, oldStream);
+    if (oldTrack && 'replaceTrack' in peer) {
+        (peer as { replaceTrack: (oldTrack: MediaStreamTrack, newTrack: MediaStreamTrack, stream: MediaStream) => void }).replaceTrack(oldTrack, newTrack, oldStream);
     }
 };
 

@@ -8,7 +8,7 @@ export const Sidebar = () => {
     const { user, logout, walletAddress } = useAuthStore();
     const { pacts, activePact, setActivePact } = usePactStore();
     const { sidebarOpen, openModal } = useUIStore();
-    const [hoveredPact, setHoveredPact] = useState<string | null>(null);
+    const [_hoveredPact, setHoveredPact] = useState<string | null>(null);
 
     if (!sidebarOpen) return null;
 
@@ -70,8 +70,8 @@ export const Sidebar = () => {
                                 onMouseEnter={() => setHoveredPact(pact.id)}
                                 onMouseLeave={() => setHoveredPact(null)}
                                 className={`w-full p-3 rounded-xl text-left transition-all duration-200 ${activePact?.id === pact.id
-                                        ? 'bg-duo-500/10 border border-duo-500/30'
-                                        : 'hover:bg-dark-800 border border-transparent'
+                                    ? 'bg-duo-500/10 border border-duo-500/30'
+                                    : 'hover:bg-dark-800 border border-transparent'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -82,10 +82,10 @@ export const Sidebar = () => {
                                         </div>
                                         <span
                                             className={`absolute bottom-0 right-0 ${pact.status === 'active'
-                                                    ? 'status-online'
-                                                    : pact.status === 'pending'
-                                                        ? 'status-connecting'
-                                                        : 'status-offline'
+                                                ? 'status-online'
+                                                : pact.status === 'pending'
+                                                    ? 'status-connecting'
+                                                    : 'status-offline'
                                                 }`}
                                         />
                                     </div>

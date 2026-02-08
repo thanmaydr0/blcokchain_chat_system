@@ -124,7 +124,7 @@ export const decrypt = async (
     ciphertext: ArrayBuffer
 ): Promise<string> => {
     const decrypted = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv: iv as unknown as BufferSource },
         key,
         ciphertext
     );

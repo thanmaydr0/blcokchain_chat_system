@@ -166,7 +166,7 @@ export const decryptFile = async (
     const arrayBuffer = await encryptedBlob.arrayBuffer();
 
     const decryptedData = await crypto.subtle.decrypt(
-        { name: 'AES-GCM', iv },
+        { name: 'AES-GCM', iv: iv as unknown as BufferSource },
         encryptionKey,
         arrayBuffer
     );

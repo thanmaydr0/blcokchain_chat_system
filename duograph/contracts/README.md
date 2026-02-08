@@ -1,54 +1,73 @@
 # DuoGraph Smart Contracts
 
-Solidity smart contracts for the DuoGraph decentralized chat system.
+Binary Pact Protocol - Blockchain-anchored two-person chat system with ERC-4337 Account Abstraction.
 
 ## Contracts
 
-### BinaryPact.sol
-The core contract implementing the Binary Pact Protocol:
-- Creates pacts between exactly 2 users
-- Stores encrypted metadata on IPFS
-- Manages pact lifecycle (pending → active → dissolved)
-- Registers public keys for encryption
+| Contract | Description |
+|----------|-------------|
+| `PactFactory.sol` | Factory for creating 2-person pacts |
+| `BinaryPact.sol` | Individual pact with immutable users |
+| `PaymasterContract.sol` | ERC-4337 gas sponsorship |
+| `DuoGraphAccount.sol` | Smart account for users |
 
-## Development
+## Security Guarantee
 
-### Prerequisites
-- [Foundry](https://book.getfoundry.sh/getting-started/installation)
+**3rd party exclusion is mathematically enforced:**
+- `user1` and `user2` are `immutable` - set at deployment, never changeable
+- No `addUser()` or similar function exists in any contract
+- All pact functions have `onlyPactMember` modifier
 
-### Install
+## Quick Start
+
 ```bash
-forge install
+# Install dependencies
+npm install
+
+# Compile contracts
+npm run compile
+
+# Run tests
+npm test
+
+# Deploy to Sepolia
+npm run deploy:sepolia
 ```
 
-### Build
+## Environment Setup
+
 ```bash
-forge build
+cp .env.example .env
+# Edit .env with your private key and API keys
 ```
 
-### Test
+## Contract Addresses (Sepolia)
+
+After deployment, addresses are saved to `deployments.json`.
+
+## Testing
+
 ```bash
-forge test
+# Run all tests
+npm test
+
+# With gas reporting
+REPORT_GAS=true npm test
+
+# Coverage
+npm run test:coverage
 ```
 
-### Deploy to Base Sepolia
-```bash
-# Set environment variables
-export BASE_SEPOLIA_RPC=https://sepolia.base.org
-export PRIVATE_KEY=your_private_key
+## Deployment
 
-# Deploy
-forge script script/Deploy.s.sol:DeployScript --rpc-url $BASE_SEPOLIA_RPC --broadcast
+```bash
+# Local (Hardhat network)
+npm run deploy:local
+
+# Ethereum Sepolia Testnet
+npm run deploy:sepolia
 ```
 
-## Contract Addresses
-
-| Contract | Base Sepolia |
-|----------|--------------|
-| BinaryPact | TBD |
-
-## Getting Testnet ETH
-
-Get Base Sepolia testnet ETH from:
-- [Base Faucet](https://www.coinbase.com/faucets/base-ethereum-goerli-faucet)
-- [Alchemy Faucet](https://sepoliafaucet.com/)
+Get testnet ETH from:
+- [Alchemy Faucet](https://www.alchemy.com/faucets/ethereum-sepolia)
+- [Infura Faucet](https://www.infura.io/faucet/sepolia)

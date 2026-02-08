@@ -2,87 +2,97 @@
 
 A blockchain-anchored, decentralized two-person chat system with extreme privacy.
 
-## Features
+## 🔐 Features
 
-- 🔐 **End-to-End Encryption** - Signal Protocol Double Ratchet algorithm
-- 🔗 **Blockchain Anchored** - Binary Pact Protocol on Base Sepolia
-- 🔑 **Hardware-Bound Identity** - Keys stored in browser's secure storage
-- 📞 **WebRTC Calls** - Peer-to-peer audio/video calls
-- 📁 **IPFS Media** - Decentralized encrypted file sharing
-- ⛽ **Zero Gas Fees** - ERC-4337 Account Abstraction support
+- **End-to-End Encryption** - Signal Protocol Double Ratchet algorithm
+- **Blockchain Anchored** - Binary Pact Protocol on Ethereum Sepolia
+- **Hardware-Bound Identity** - Keys stored in browser's secure storage
+- **WebRTC Calls** - Peer-to-peer audio/video calls
+- **IPFS Media** - Decentralized encrypted file sharing
+- **Zero Gas Fees** - ERC-4337 Account Abstraction support
 
-## Tech Stack
+## 📁 Project Structure
 
-- **Frontend**: Vite + React + TypeScript + TailwindCSS
-- **Backend**: Supabase (encrypted metadata only)
-- **Blockchain**: Base Sepolia (ERC-4337)
-- **Encryption**: Web Crypto API + Signal Protocol
-- **Media**: IPFS via Pinata
+```
+duograph/
+├── frontend/          # Vite + React + TypeScript + TailwindCSS
+├── contracts/         # Solidity smart contracts (Hardhat)
+└── docs/              # API and deployment documentation
+```
 
-## Quick Start
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+- MetaMask wallet
+
+### Frontend Setup
 
 ```bash
-# Clone the repository
-git clone <repo-url>
-cd duograph
-
-# Install frontend dependencies
 cd frontend
 npm install
 
-# Set up environment variables
+# Copy environment file
 cp .env.example .env
-# Edit .env with your credentials
+# Edit .env with your Supabase credentials
 
 # Start development server
 npm run dev
 ```
 
-## Project Structure
+### Smart Contracts Setup
 
-```
-duograph/
-├── frontend/           # Vite + React application
-│   ├── src/
-│   │   ├── components/ # React components
-│   │   ├── hooks/      # Custom hooks
-│   │   ├── lib/        # Utilities (crypto, web3, etc.)
-│   │   ├── pages/      # Page components
-│   │   ├── store/      # Zustand state management
-│   │   └── types/      # TypeScript definitions
-│   └── ...
-├── contracts/          # Solidity smart contracts
-│   ├── src/
-│   │   └── BinaryPact.sol
-│   └── ...
-└── docs/              # Documentation
-    ├── API.md
-    └── DEPLOYMENT.md
+```bash
+cd contracts
+npm install
+
+# Copy environment file
+cp .env.example .env
+# Edit .env with your private key
+
+# Compile contracts
+npm run compile
+
+# Run tests
+npm test
+
+# Deploy to Sepolia
+npm run deploy:sepolia
 ```
 
-## Documentation
+## 🔗 Smart Contracts
+
+| Contract | Description |
+|----------|-------------|
+| `PactFactory.sol` | Factory for 2-person pacts with EIP-712 |
+| `BinaryPact.sol` | Immutable 2-user pacts with session keys |
+| `PaymasterContract.sol` | ERC-4337 gas sponsorship |
+| `DuoGraphAccount.sol` | Smart account + factory |
+
+### Security Guarantee
+
+**3rd party exclusion is mathematically enforced:**
+- `user1` and `user2` are `immutable` - set at deployment, never changeable
+- No `addUser()` or similar function exists in any contract
+- All pact functions have `onlyPactMember` modifier
+
+## 📚 Documentation
 
 - [API Documentation](docs/API.md) - Supabase schema, smart contract ABI, protocols
 - [Deployment Guide](docs/DEPLOYMENT.md) - Setup and deployment instructions
 
-## Binary Pact Protocol
+## 🛠 Tech Stack
 
-The core innovation of DuoGraph is the Binary Pact Protocol:
+| Layer | Technology |
+|-------|------------|
+| Frontend | Vite, React, TypeScript, TailwindCSS |
+| Backend | Supabase (encrypted metadata only) |
+| Blockchain | Ethereum Sepolia, ERC-4337 |
+| Encryption | Web Crypto API, Signal Protocol |
+| Media | IPFS via Pinata |
 
-1. **Create Pact**: User A invites User B to form a pact
-2. **Accept Pact**: User B accepts, activating the encrypted channel
-3. **Communicate**: Only these 2 users can ever participate
-4. **Dissolve**: Either user can end the pact
-
-This creates an immutable record of the two-party relationship on-chain while keeping all communication encrypted and off-chain.
-
-## Security
-
-- All messages encrypted client-side before transmission
-- Keys never leave the user's device
-- Supabase stores only encrypted metadata
-- Blockchain provides identity verification, not message storage
-
-## License
+## 📄 License
 
 MIT

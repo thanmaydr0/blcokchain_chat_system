@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+artifacts/
+cache/
+typechain-types/
+
+# Environment - NEVER commit
+.env
+*.env
+
+# Deployment outputs
+deployments.json
+broadcast/
+
+# Coverage
+coverage/
+coverage.json
+
+# Foundry (not using)
+out/
